@@ -15,7 +15,7 @@
         .answer { position: absolute; cursor: pointer; color: white; font-size: 20px; background-color: transparent; }
         .correct { background-color: green; } /* Correct answers background color */
         .incorrect { background-color: red; } /* Incorrect answers background color */
-        .player { position: absolute; bottom: 20px; font-size: 30px; left: 50%; transform: translateX(-50%); color: white; width: 50px; height: 50px; text-align: center; line-height: 50px; border-radius: 50%; } /* Increased size and centered text */
+        .player { position: absolute; bottom: 20px; font-size: 30px; left: 50%; transform: translateX(-50%); color: white; }
         .disabled { pointer-events: none; opacity: 0.5; }
         .stat { font-size: 18px; }
     </style>
@@ -156,15 +156,12 @@
         function checkCollision(answerElement) {
             const playerRect = playerElement.getBoundingClientRect();
             const answerRect = answerElement.getBoundingClientRect();
-            
-            // Adding a buffer for collision detection
-            const buffer = 10;
 
             if (
-                playerRect.left - buffer < answerRect.right &&
-                playerRect.right + buffer > answerRect.left &&
-                playerRect.top - buffer < answerRect.bottom &&
-                playerRect.bottom + buffer > answerRect.top
+                playerRect.left < answerRect.right &&
+                playerRect.right > answerRect.left &&
+                playerRect.top < answerRect.bottom &&
+                playerRect.bottom > answerRect.top
             ) {
                 answerElement.click();
                 updateAnswerColors(answerElement);
@@ -273,6 +270,24 @@
             backgroundMusic.pause(); // Pause background music
         }
 
+        function handleTouchStart(event) {
+            if (!gameStarted || gameEnded) return;
+            const touchX = event.touches[0].clientX;
+            const containerWidth = answersContainer.offsetWidth;
+            const newPlayerPosition = (touchX / containerWidth) * 100;
+            playerPosition = Math.max(0, Math.min(newPlayerPosition, 100));
+            playerElement.style.left = playerPosition + '%';
+        }
+
+        function handleTouchMove(event) {
+            if (!gameStarted || gameEnded) return;
+            const touchX = event.touches[0].clientX;
+            const containerWidth = answersContainer.offsetWidth;
+            const newPlayerPosition = (touchX / containerWidth) * 100;
+            playerPosition = Math.max(0, Math.min(newPlayerPosition, 100));
+            playerElement.style.left = playerPosition + '%';
+        }
+
         levelSelect.addEventListener('change', () => {
             levelSelected = true;
             startGame();
@@ -290,26 +305,8 @@
         });
 
         document.addEventListener('keydown', movePlayer);
-
-        // Touch controls
-        let touchStartX = 0;
-
-        answersContainer.addEventListener('touchstart', (event) => {
-            touchStartX = event.touches[0].clientX;
-        });
-
-        answersContainer.addEventListener('touchmove', (event) => {
-            if (gameStarted && !gameEnded) {
-                const touchEndX = event.touches[0].clientX;
-                if (touchEndX < touchStartX) {
-                    playerPosition = Math.max(0, playerPosition - 5);
-                } else if (touchEndX > touchStartX) {
-                    playerPosition = Math.min(100, playerPosition + 5);
-                }
-                playerElement.style.left = playerPosition + '%';
-                touchStartX = touchEndX;
-            }
-        });
+        document.addEventListener('touchstart', handleTouchStart);
+        document.addEventListener('touchmove', handleTouchMove);
 
         resetGame();
     </script>
