@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>九九乘法背诵游戏</title>
+    <style>
+        body { font-family: Arial, sans-serif; position: relative; height: 100vh; margin: 0; overflow: hidden; background-color: black; color: white; }
+        .game-container { display: flex; flex-direction: column; align-items: center; position: relative; height: 100%; }
+        .top-bar { display: flex; justify-content: space-between; width: 100%; position: absolute; top: 0; padding: 10px; box-sizing: border-box; }
+        .top-bar div { display: flex; align-items: center; }
+        .stats { display: flex; align-items: center; gap: 20px; } /* Adjust gap here */
+        .question { font-size: 24px; margin-top: 60px; text-align: center; }
+        .answers-container { position: relative; width: 80%; height: 70%; overflow: hidden; }
+        .answer { position: absolute; cursor: pointer; color: white; font-size: 20px; background-color: transparent; }
+        .correct { background-color: green; } /* Correct answers background color */
+        .incorrect { background-color: red; } /* Incorrect answers background color */
+        .player { position: absolute; bottom: 20px; font-size: 30px; left: 50%; transform: translateX(-50%); color: white; }
+        .disabled { pointer-events: none; opacity: 0.5; }
+        .stat { font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="top-bar">
+            <div class="level-select">
+                <label for="level">選擇關卡：</label>
+                <select id="level">
+                    <option value="0">待選擇</option>
+                    <option value="2">2的乘法</option>
+                    <option value="3">3的乘法</option>
+                    <option value="4">4的乘法</option>
+                    <option value="5">5的乘法</option>
+                    <option value="6">6的乘法</option>
+                    <option value="7">7的乘法</option>
+                    <option value="8">8的乘法</option>
+                    <option value="9">9的乘法</option>
+                </select>
+            </div>
+            <div class="stats">
+                <div id="total-attempts" class="stat">答題總次數：0</div>
+                <div id="game-time" class="stat">遊戲時間：00:00</div>
+            </div>
+            <div class="speed-select">
+                <label for="speed">選擇速度：</label>
+                <select id="speed">
+                    <option value="0">待選擇</option>
+                    <option value="1">慢</option>
+                    <option value="2">普通</option>
+                    <option value="3">快</option>
+                    <option value="4">更快</option>
+                </select>
+            </div>
+        </div>
+        <div class="question" id="question">2 x 1 = （　）</div>
+        <div class="answers-container" id="answers-container"></div>
+        <div class="player" id="player">★</div>
+    </div>
+
+    <!-- Add audio elements for sound effects and background music -->
+    <audio id="background-music" src="background.mp3" loop></audio>
+    <audio id="correct-sound" src="correct.mp3"></audio>
+    <audio id="incorrect-sound" src="incorrect.mp3"></audio>
+
+    <script>
+        const levelSelect = document.getElementById('level');
+        const speedSelect = document.getElementById('speed');
+        const questionElement = document.getElementById('question');
+        const answersContainer = document.getElementById('answers-container');
+        const playerElement = document.getElementById('player');
+        const backgroundMusic = document.getElementById('background-music');
+        const correctSound = document.getElementById('correct-sound');
+        const incorrectSound = document.getElementById('incorrect-sound');
+        const totalAttemptsElement = document.getElementById('total-attempts');
+        const gameTimeElement = document.getElementById('game-time');
+
+        let multiplicand = 2;
+        let currentMultiplier = 1;
+        let playerPosition = 50;
+        let dropSpeed = 1;
+        let gameStarted = false;
+        let levelSelected = false;
+        let speedSelected = false;
+        let questionAnswered = false;
+        let gameEnded = false;
+        let totalAttempts = 0;
+        let startTime = 0;
+        let timerInterval;
+
+        function getRandomMultipliers(count) {
+            const multipliers = Array.from({length: 8}, (_, i) => i + 2);
+            let randomMultipliers = [];
+            while (randomMultipliers.length < count) {
+                let randomIndex = Math.floor(Math.random() * multipliers.length);
+                let selected = multipliers.splice(randomIndex, 1)[0];
+                randomMultipliers.push(selected);
+            }
+            return randomMultipliers;
+        }
+
+        function setQuestionAndAnswers() {
+            let correctAnswer = multiplicand * currentMultiplier;
+            let correctEquation = `${multiplicand} x ${currentMultiplier} = （　）`;
+            questionElement.textContent = correctEquation;
+
+            let randomMultipliers = getRandomMultipliers(4);
+            let answers = randomMultipliers.map(m => `${multiplicand} x ${currentMultiplier} = ${multiplicand * m}`);
+            answers.push(`${multiplicand} x ${currentMultiplier} = ${correctAnswer}`);
+            answers.sort(() => Math.random() - 0.5);
+
+            answersContainer.innerHTML = '';
+
+            let answerCount = 0;
+            answers.forEach((answer, index) => {
+                if (answer === `${multiplicand} x ${currentMultiplier} = ${correctAnswer}`) {
+                    answerCount++;
+                }
+                if (answerCount > 1) {
+                    return;
+                }
+                let answerElement = document.createElement('div');
+                answerElement.className = 'answer';
+                answerElement.textContent = answer;
+                answerElement.style.left = (index * (answersContainer.offsetWidth / 5)) + 'px';
+                if (answer === `${multiplicand} x ${currentMultiplier} = ${correctAnswer}`) {
+                    answerElement.setAttribute('data-correct', 'true');
+                } else {
+                    answerElement.setAttribute('data-correct', 'false');
+                }
+                answersContainer.appendChild(answerElement);
+                animateAnswer(answerElement);
+            });
+        }
+
+        function animateAnswer(answerElement) {
+            let position = 0;
+            const speed = dropSpeed;
+            const containerHeight = answersContainer.offsetHeight;
+            const elementHeight = answerElement.offsetHeight;
+
+            function updateAnimation() {
+                position += speed;
+                if (position >= containerHeight - elementHeight) {
+                    answerElement.remove();
+                    resetQuestion();
+                } else {
+                    answerElement.style.top = position + 'px';
+                    checkCollision(answerElement);
+                    requestAnimationFrame(updateAnimation);
+                }
+            }
+
+            requestAnimationFrame(updateAnimation);
+        }
+
+        function checkCollision(answerElement) {
+            const playerRect = playerElement.getBoundingClientRect();
+            const answerRect = answerElement.getBoundingClientRect();
+
+            if (
+                playerRect.left < answerRect.right &&
+                playerRect.right > answerRect.left &&
+                playerRect.top < answerRect.bottom &&
+                playerRect.bottom > answerRect.top
+            ) {
+                answerElement.click();
+                updateAnswerColors(answerElement);
+            }
+        }
+
+        function resetQuestion() {
+            if (!questionAnswered && !gameEnded) {
+                setQuestionAndAnswers();
+            }
+        }
+
+        function checkAnswer(event) {
+            totalAttempts++;  // Increment total attempts count
+            totalAttemptsElement.textContent = `答題總次數：${totalAttempts}`;
+            
+            let selectedAnswer = event.target.textContent;
+            let correctAnswer = `${multiplicand} x ${currentMultiplier} = ${multiplicand * currentMultiplier}`;
+            if (selectedAnswer === correctAnswer) {
+                event.target.classList.add('correct');
+                if (event.target.getAttribute('data-correct') === 'true') {
+                    correctSound.play();
+                }
+                questionAnswered = true;
+                if (currentMultiplier < 9) {
+                    currentMultiplier++;
+                    setTimeout(() => {
+                        questionAnswered = false;
+                        setQuestionAndAnswers();
+                    }, 500);
+                } else {
+                    if (!gameEnded) {
+                        gameEnded = true;
+                        levelSelect.classList.add('disabled');
+                        speedSelect.classList.add('disabled');
+                        answersContainer.innerHTML = '';
+                        questionElement.textContent = '遊戲結束！你很棒！如果還要玩的話，請重新整理網頁；也可以嘗試挑戰進階版喔~';
+                        disableGame();
+                        clearInterval(timerInterval); // Stop the timer
+                        updateGameTime(); // Ensure the final time is displayed
+                    }
+                }
+            } else {
+                event.target.classList.add('incorrect');
+                if (event.target.getAttribute('data-correct') === 'false') {
+                    incorrectSound.play();
+                }
+            }
+        }
+
+        function resetGame() {
+            levelSelect.classList.remove('disabled');
+            speedSelect.classList.remove('disabled');
+            levelSelect.value = '0';
+            speedSelect.value = '0';
+            multiplicand = 2;
+            currentMultiplier = 1;
+            dropSpeed = 1;
+            gameStarted = false;
+            questionAnswered = false;
+            gameEnded = false;
+            totalAttempts = 0;
+            totalAttemptsElement.textContent = `答題總次數：${totalAttempts}`;
+            clearInterval(timerInterval);
+            gameTimeElement.textContent = '遊戲時間：00:00';
+            answersContainer.innerHTML = '';
+            questionElement.textContent = '2 x 1 = （　）';
+        }
+
+        function movePlayer(event) {
+            if (gameStarted && !gameEnded) {
+                if (event.key === 'ArrowLeft') {
+                    playerPosition = Math.max(0, playerPosition - 5);
+                } else if (event.key === 'ArrowRight') {
+                    playerPosition = Math.min(100, playerPosition + 5);
+                }
+                playerElement.style.left = playerPosition + '%';
+            }
+        }
+
+        function startGame() {
+            if (levelSelected && speedSelected && !gameStarted) {
+                gameStarted = true;
+                levelSelect.classList.add('disabled');
+                speedSelect.classList.add('disabled');
+                multiplicand = parseInt(levelSelect.value);
+                dropSpeed = parseInt(speedSelect.value) + 1;
+                setQuestionAndAnswers();
+                backgroundMusic.play(); // Start background music
+                startTime = Date.now();
+                timerInterval = setInterval(updateGameTime, 1000); // Start the timer
+            }
+        }
+
+        function updateGameTime() {
+            let elapsedTime = Math.floor((Date.now() - startTime) / 1000);
+            let minutes = Math.floor(elapsedTime / 60);
+            let seconds = elapsedTime % 60;
+            gameTimeElement.textContent = `遊戲時間：${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function disableGame() {
+            levelSelect.classList.add('disabled');
+            speedSelect.classList.add('disabled');
+            document.removeEventListener('keydown', movePlayer);
+            backgroundMusic.pause(); // Pause background music
+        }
+
+        levelSelect.addEventListener('change', () => {
+            levelSelected = true;
+            startGame();
+        });
+
+        speedSelect.addEventListener('change', () => {
+            speedSelected = true;
+            startGame();
+        });
+
+        answersContainer.addEventListener('click', (event) => {
+            if (event.target.classList.contains('answer')) {
+                checkAnswer(event);
+            }
+        });
+
+        document.addEventListener('keydown', movePlayer);
+
+        resetGame();
+    </script>
+</body>
+</html>
